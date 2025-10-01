@@ -1,0 +1,98 @@
+{
+  "project_info": {
+    "project_number": "695695824497",
+    "project_id": "e-learn-ea824",
+    "storage_bucket": "e-learn-ea824.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:695695824497:android:d0300c8e413366659aadd0",
+        "android_client_info": {
+          "package_name": "com.hackethos4u.admin"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "695695824497-8vq1undj887pu8k58luf5oaemv6csn29.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hackethos4u.admin",
+            "certificate_hash": "6b2e88d23a07769c0c251e9be5aba7d88c035c68"
+          }
+        },
+        {
+          "client_id": "695695824497-2l8dhhqg2he9n58nmrtknco2dpbjta3s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFjeD1XmnQahkOHIxmrvaU__58tiUG3xU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "695695824497-2l8dhhqg2he9n58nmrtknco2dpbjta3s.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "695695824497-5fsfplh0t0gfjvctn57ippkf7rmjktga.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hackethos4u.admin"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:695695824497:android:2a7d57073ee5c9ec9aadd0",
+        "android_client_info": {
+          "package_name": "com.hackethos4u.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "695695824497-un18e5987usddua56bcbs8bq36dt9mos.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hackethos4u.app",
+            "certificate_hash": "6b2e88d23a07769c0c251e9be5aba7d88c035c68"
+          }
+        },
+        {
+          "client_id": "695695824497-2l8dhhqg2he9n58nmrtknco2dpbjta3s.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCFjeD1XmnQahkOHIxmrvaU__58tiUG3xU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "695695824497-2l8dhhqg2he9n58nmrtknco2dpbjta3s.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "695695824497-5fsfplh0t0gfjvctn57ippkf7rmjktga.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hackethos4u.admin"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
