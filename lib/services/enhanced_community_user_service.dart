@@ -418,7 +418,7 @@ class EnhancedCommunityUserService {
           .get();
 
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         return {...data, 'id': doc.id};
       }).toList();
     } catch (e) {
@@ -478,7 +478,7 @@ class EnhancedCommunityUserService {
           .get();
 
       return snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         return {...data, 'id': doc.id};
       }).toList();
     } catch (e) {
@@ -503,7 +503,7 @@ class EnhancedCommunityUserService {
             .get();
 
         for (final doc in postsSnapshot.docs) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           if (data['title'].toString().toLowerCase().contains(query.toLowerCase()) ||
               data['content'].toString().toLowerCase().contains(query.toLowerCase())) {
             results.add({...data, 'id': doc.id, 'type': 'post'});
@@ -518,7 +518,7 @@ class EnhancedCommunityUserService {
             .get();
 
         for (final doc in qaSnapshot.docs) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           if (data['question'].toString().toLowerCase().contains(query.toLowerCase())) {
             results.add({...data, 'id': doc.id, 'type': 'qa'});
           }
@@ -574,15 +574,15 @@ class EnhancedCommunityUserService {
 
       return {
         'posts': futures[0].docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           return {...data, 'id': doc.id};
         }).toList(),
         'comments': futures[1].docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           return {...data, 'id': doc.id};
         }).toList(),
         'qa': futures[2].docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
+          final data = doc.data();
           return {...data, 'id': doc.id};
         }).toList(),
       };

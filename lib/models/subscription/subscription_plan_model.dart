@@ -34,20 +34,20 @@ class SubscriptionPlanModel {
   });
 
   factory SubscriptionPlanModel.fromJson(Map<String, dynamic> json) {
-    String _asString(dynamic v, [String fallback = '']) =>
+    String asString(dynamic v, [String fallback = '']) =>
         v == null ? fallback : v.toString();
-    double _asDouble(dynamic v, [double fallback = 0.0]) {
+    double asDouble(dynamic v, [double fallback = 0.0]) {
       if (v == null) return fallback;
       if (v is num) return v.toDouble();
       return double.tryParse(v.toString()) ?? fallback;
     }
-    int _asInt(dynamic v, [int fallback = 0]) {
+    int asInt(dynamic v, [int fallback = 0]) {
       if (v == null) return fallback;
       if (v is int) return v;
       if (v is num) return v.toInt();
       return int.tryParse(v.toString()) ?? fallback;
     }
-    DateTime _asDateTime(dynamic v) {
+    DateTime asDateTime(dynamic v) {
       if (v is Timestamp) return v.toDate();
       if (v is DateTime) return v;
       if (v is String) {
@@ -63,21 +63,21 @@ class SubscriptionPlanModel {
     }
 
     return SubscriptionPlanModel(
-      id: _asString(json['id']),
-      name: _asString(json['name']),
-      description: _asString(json['description']),
-      price: _asDouble(json['price']),
-      currency: _asString(json['currency'], 'INR'),
-      duration: _asString(json['duration'], 'monthly'),
-      durationMonths: _asInt(json['durationMonths'], 1),
+      id: asString(json['id']),
+      name: asString(json['name']),
+      description: asString(json['description']),
+      price: asDouble(json['price']),
+      currency: asString(json['currency'], 'INR'),
+      duration: asString(json['duration'], 'monthly'),
+      durationMonths: asInt(json['durationMonths'], 1),
       isActive: json['isActive'] is bool ? json['isActive'] as bool : true,
       features: (json['features'] is List)
           ? List<String>.from((json['features'] as List).map((e) => e.toString()))
           : <String>[],
-      discountPercentage: _asDouble(json['discountPercentage'], 0.0),
-      originalPrice: _asDouble(json['originalPrice'], 0.0),
-      createdAt: _asDateTime(json['createdAt']),
-      updatedAt: json['updatedAt'] != null ? _asDateTime(json['updatedAt']) : null,
+      discountPercentage: asDouble(json['discountPercentage'], 0.0),
+      originalPrice: asDouble(json['originalPrice'], 0.0),
+      createdAt: asDateTime(json['createdAt']),
+      updatedAt: json['updatedAt'] != null ? asDateTime(json['updatedAt']) : null,
       metadata: json['metadata'] is Map<String, dynamic> ? json['metadata'] as Map<String, dynamic> : null,
     );
   }

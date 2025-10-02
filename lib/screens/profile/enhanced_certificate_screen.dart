@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/enhanced_certificate_service.dart';
-import '../../utils/app_theme.dart';
 
 class EnhancedCertificateScreen extends StatefulWidget {
   const EnhancedCertificateScreen({super.key});

@@ -3,12 +3,12 @@ class RazorpayConfig {
   // Working test credentials for development
   
   // Test Mode Credentials (for development)
-  static const String testKeyId = 'rzp_test_RIwpmsMiWbNozZ';
-  static const String testKeySecret = 'MsBn4wd6VQLok4K6OTprRpD7';
+  static const String testKeyId = 'rzp_test_xxxxxxxxxx';
+  static const String testKeySecret = 'xxxxxxxxxxxxxxx';
   
   // Live Mode Credentials (for production)
-  static const String liveKeyId = 'rzp_live_your_live_key_id_here';
-  static const String liveKeySecret = 'your_live_key_secret_here';
+  static const String liveKeyId = 'rzp_live_xxxxxxxxxxxxxxx';
+  static const String liveKeySecret = 'xxxxxxxxxxxxxxxxx';
   
   // Current mode - using TEST mode for development
   static const bool isTestMode = true;
@@ -23,7 +23,7 @@ class RazorpayConfig {
   static const String backendUrl = 'https://api.razorpay.com/v1';
   
   // Webhook URL for payment notifications
-  static const String webhookUrl = 'https://api-6b7a3347va-uc.a.run.app/webhook/razorpay';
+  static const String webhookUrl = 'https://hackethos4u.com/wp-admin/admin-post.php?action=rzp_wc_webhook';
   
   // Payment timeout in minutes
   static const int paymentTimeoutMinutes = 10;
@@ -72,3 +72,5 @@ class RazorpayConfig {
     return 'Razorpay configured for ${isTestMode ? 'TEST' : 'LIVE'} mode.';
   }
 }
+
+
