@@ -1869,7 +1869,7 @@ class _DetailCourseScreenState extends State<DetailCourseScreen>
                           );
                         }),
                         const SizedBox(width: 12),
-                        Text('${avgRating.toStringAsFixed(1)}',
+                        Text(avgRating.toStringAsFixed(1),
                             style: theme.textTheme.titleLarge
                                 ?.copyWith(fontWeight: FontWeight.bold)),
                         const SizedBox(width: 4),
@@ -1890,7 +1890,7 @@ class _DetailCourseScreenState extends State<DetailCourseScreen>
                 ),
                 child: Column(
                   children: [
-                    Text('${avgRating.toStringAsFixed(1)}',
+                    Text(avgRating.toStringAsFixed(1),
                         style: theme.textTheme.headlineMedium
                             ?.copyWith(fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
                     Text('out of 5',

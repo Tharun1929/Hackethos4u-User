@@ -7,7 +7,6 @@ import '../course/detail_course_screen.dart';
 import '../../widgets/sliding_ads_widget.dart';
 import '../homescreen/main_page.dart';
 import '../../services/expert_service.dart';
-import '../../services/course_data_population_service.dart';
 import '../../utils/app_themes.dart';
 import '../../providers/user_provider.dart';
 import 'dart:async';
@@ -669,7 +668,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final String priceText = priceRaw is num ? priceRaw.toStringAsFixed(0) : (priceRaw?.toString() ?? '0');
     final String? imageAny = (course['image'] ?? course['thumbnail'] ?? course['courseImage'])?.toString();
     return Container(
-      constraints: const BoxConstraints(maxHeight: 220),
+      constraints: const BoxConstraints(maxHeight: 230),
       child: GestureDetector(
         onTap: () {
           final id = course['id'];
@@ -701,16 +700,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
               child: SizedBox(
-                height: 120, // Fixed height to prevent overflow
+                height: 105, // Fixed height to prevent overflow
                 width: double.infinity,
                 child: Image.network(
                   (imageAny is String && imageAny.isNotEmpty) ? imageAny : 'assets/default_pp.png',
-                  height: 120,
+                  height: 105,
                   width: double.infinity,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     return Container(
-                      height: 120,
+                      height: 105,
                       decoration: BoxDecoration(
                         color: theme.colorScheme.primary,
                       ),
@@ -809,7 +808,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         ),
                         const SizedBox(width: 8),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: theme.colorScheme.primary,
                             borderRadius: BorderRadius.circular(8),

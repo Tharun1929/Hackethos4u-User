@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/enhanced_payment_service.dart';
 import '../../models/subscription/subscription_plan_model.dart';
-import '../../utils/app_theme.dart';
 
 class EnhancedPaymentScreen extends StatefulWidget {
   final Map<String, dynamic> courseData;
@@ -22,9 +21,10 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
   final EnhancedPaymentService _paymentService = EnhancedPaymentService();
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  late AnimationController _animationController;
-  late Animation<double> _fadeAnimation;
-  late Animation<Offset> _slideAnimation;
+  // Make animation controllers nullable to avoid late initialization error
+  AnimationController? _animationController;
+  Animation<double>? _fadeAnimation;
+  Animation<Offset>? _slideAnimation;
 
   // State
   bool _isLoading = true;
@@ -44,6 +44,8 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
   }
 
   Future<void> _applyCoupon() async {
+    if (!mounted) return;
+    
     setState(() {
       _couponError = null;
       _discountAmount = null;
@@ -51,7 +53,9 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
 
     final code = _couponController.text.trim();
     if (code.isEmpty) {
-      setState(() => _couponError = 'Enter a code');
+      if (mounted) {
+        setState(() => _couponError = 'Enter a code');
+      }
       return;
     }
 
@@ -64,10 +68,13 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
           .limit(1)
           .get();
 
+      if (!mounted) return;
+
       if (snap.docs.isEmpty) {
         setState(() => _couponError = 'Invalid or inactive coupon');
         return;
       }
+      
       final data = snap.docs.first.data();
       final double base = (_selectedPlan?.effectivePrice ??
           ((widget.courseData['price'] is num)
@@ -81,14 +88,18 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
         discount = (data['value'] as num).toDouble();
       }
 
-      setState(() {
-        _discountAmount = discount.clamp(0, base);
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Coupon applied: -₹${_discountAmount!.toInt()}')),
-      );
+      if (mounted) {
+        setState(() {
+          _discountAmount = discount.clamp(0, base);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Coupon applied: -₹${_discountAmount!.toInt()}')),
+        );
+      }
     } catch (e) {
-      setState(() => _couponError = 'Error applying coupon');
+      if (mounted) {
+        setState(() => _couponError = 'Error applying coupon');
+      }
     }
   }
 
@@ -99,24 +110,28 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _animationController!, curve: Curves.easeInOut),
     );
 
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.3),
       end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic));
+    ).animate(CurvedAnimation(parent: _animationController!, curve: Curves.easeOutCubic));
 
-    _animationController.forward();
+    _animationController!.forward();
   }
 
   Future<void> _loadSubscriptionPlans() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
     });
 
     try {
       final plans = await _paymentService.getSubscriptionPlans();
+
+      if (!mounted) return;
 
       // Fallback: if no plans defined in Firestore, create a one-time purchase option
       List<SubscriptionPlanModel> effectivePlans = plans;
@@ -144,6 +159,8 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
+      
       setState(() {
         _isLoading = false;
       });
@@ -158,7 +175,8 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _animationController?.dispose();
+    _couponController.dispose();
     super.dispose();
   }
 
@@ -176,29 +194,31 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : FadeTransition(
-              opacity: _fadeAnimation,
-              child: SlideTransition(
-                position: _slideAnimation,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildCourseInfo(),
-                      const SizedBox(height: 24),
-                      _buildSubscriptionPlans(),
-                      const SizedBox(height: 24),
-                      _buildPaymentMethods(),
-                      const SizedBox(height: 24),
-                      _buildPaymentButton(),
-                      const SizedBox(height: 16),
-                      _buildSecurityInfo(),
-                    ],
+          : _fadeAnimation != null && _slideAnimation != null
+              ? FadeTransition(
+                  opacity: _fadeAnimation!,
+                  child: SlideTransition(
+                    position: _slideAnimation!,
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildCourseInfo(),
+                          const SizedBox(height: 24),
+                          _buildSubscriptionPlans(),
+                          const SizedBox(height: 24),
+                          _buildPaymentMethods(),
+                          const SizedBox(height: 24),
+                          _buildPaymentButton(),
+                          const SizedBox(height: 16),
+                          _buildSecurityInfo(),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-              ),
-            ),
+                )
+              : const Center(child: CircularProgressIndicator()),
     );
   }
 
@@ -227,15 +247,21 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
                 height: 60,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
-                  image: DecorationImage(
-                    image: NetworkImage(widget.courseData['image'] ?? ''),
-                    fit: BoxFit.cover,
-                    onError: (exception, stackTrace) {},
-                  ),
+                  color: Colors.grey[200],
                 ),
-                child: widget.courseData['image'] == null
-                    ? const Icon(Icons.school, size: 30, color: Colors.grey)
-                    : null,
+                child: widget.courseData['image'] != null && 
+                       widget.courseData['image'].toString().isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          widget.courseData['image'],
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.school, size: 30, color: Colors.grey);
+                          },
+                        ),
+                      )
+                    : const Icon(Icons.school, size: 30, color: Colors.grey),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -267,7 +293,7 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        Icon(Icons.star, color: Colors.amber, size: 16),
+                        const Icon(Icons.star, color: Colors.amber, size: 16),
                         const SizedBox(width: 4),
                         Text(
                           '${widget.courseData['rating'] ?? 4.5}',
@@ -372,17 +398,19 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        plan.name,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Text(
+                          plan.name,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       Row(
                         children: [
-                          if (plan.isDiscounted) ...[
+                          if (plan.isDiscounted && plan.originalPrice != null) ...[
                             Text(
-                              '₹${plan.originalPrice?.toInt()}',
+                              '₹${plan.originalPrice!.toInt()}',
                               style: theme.textTheme.bodyMedium?.copyWith(
                                 decoration: TextDecoration.lineThrough,
                                 color: Colors.grey[600],
@@ -422,7 +450,7 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
                       padding: const EdgeInsets.only(bottom: 4),
                       child: Row(
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.check_circle,
                             color: Colors.green,
                             size: 16,
@@ -519,9 +547,11 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
                 value: 'razorpay',
                 groupValue: _selectedPaymentMethod,
                 onChanged: (value) {
-                  setState(() {
-                    _selectedPaymentMethod = value!;
-                  });
+                  if (value != null) {
+                    setState(() {
+                      _selectedPaymentMethod = value;
+                    });
+                  }
                 },
               ),
             ],
@@ -538,7 +568,7 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
         ? (widget.courseData['price'] as num).toDouble()
         : 0.0;
     final baseAmount = _selectedPlan?.effectivePrice ?? coursePrice;
-    final totalAmount = baseAmount - (_discountAmount ?? 0);
+    final totalAmount = (baseAmount - (_discountAmount ?? 0)).clamp(0, double.infinity);
 
     return SizedBox(
       width: double.infinity,
@@ -584,7 +614,7 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
       ),
       child: Row(
         children: [
-          Icon(
+          const Icon(
             Icons.security,
             color: Colors.green,
             size: 20,
@@ -605,23 +635,52 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
   }
 
   Future<void> _processPayment() async {
-    // Allow payment even if there is no subscription plan by using course price
+    if (!mounted) return;
+    
+    // Validate amount before processing
+    final double coursePrice = (widget.courseData['price'] is num)
+        ? (widget.courseData['price'] as num).toDouble()
+        : 0.0;
+    final baseAmount = _selectedPlan?.effectivePrice ?? coursePrice;
+    final totalAmount = (baseAmount - (_discountAmount ?? 0)).clamp(0, double.infinity);
 
+    if (totalAmount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid payment amount'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (widget.courseData['id'] == null || widget.courseData['id'].toString().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Invalid course data'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    
     setState(() {
       _isProcessing = true;
     });
 
     try {
+      print('Starting payment with amount: $totalAmount');
+      print('Course ID: ${widget.courseData['id']}');
+      print('Plan ID: ${_selectedPlan?.id}');
+
       await _paymentService.startCoursePayment(
         courseId: widget.courseData['id'] ?? '',
         courseTitle: widget.courseData['title'] ?? '',
-        amount: (_selectedPlan?.effectivePrice ??
-            ((widget.courseData['price'] is num)
-                ? (widget.courseData['price'] as num).toDouble()
-                : 0.0)) - (_discountAmount ?? 0),
+        amount: totalAmount.toDouble(),
         currency: 'INR',
         subscriptionPlanId: _selectedPlan?.id,
         onSuccess: (response) {
+          if (!mounted) return;
           setState(() {
             _isProcessing = false;
           });
@@ -634,6 +693,7 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
           Navigator.of(context).pop(true);
         },
         onFailure: (response) {
+          if (!mounted) return;
           setState(() {
             _isProcessing = false;
           });
@@ -645,6 +705,7 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
           );
         },
         onExternalWallet: (response) {
+          if (!mounted) return;
           setState(() {
             _isProcessing = false;
           });
@@ -657,13 +718,16 @@ class _EnhancedPaymentScreenState extends State<EnhancedPaymentScreen>
         },
       );
     } catch (e) {
+      print('Payment error details: $e');
+      if (!mounted) return;
       setState(() {
         _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Payment error: $e'),
+          content: Text('Payment error: ${e.toString()}'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     }

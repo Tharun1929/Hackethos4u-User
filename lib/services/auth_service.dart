@@ -90,8 +90,6 @@ class AuthService {
               .attemptLightweightAuthentication() ??
           await GoogleSignIn.instance.authenticate(scopeHint: const ['email', 'profile']);
 
-      if (googleUser == null) return null;
-
       final GoogleSignInAuthentication googleAuth = googleUser.authentication;
       final credential = GoogleAuthProvider.credential(idToken: googleAuth.idToken);
 

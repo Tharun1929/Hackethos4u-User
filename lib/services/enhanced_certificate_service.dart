@@ -458,7 +458,7 @@ class EnhancedCertificateService {
     final month = months[date.month - 1];
     final year = date.year;
     
-    return '${day}${_getOrdinalSuffix(day)} $month $year';
+    return '$day${_getOrdinalSuffix(day)} $month $year';
   }
 
   /// Get ordinal suffix for day

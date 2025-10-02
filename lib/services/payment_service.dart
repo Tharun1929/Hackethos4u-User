@@ -5,10 +5,7 @@ import 'package:razorpay_flutter/razorpay_flutter.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:http/http.dart' as http;
-import 'coupon_service.dart';
 import '../config/razorpay_config.dart';
-
-enum PaymentGateway { razorpay, stripe, paypal }
 
 class PaymentService {
   static final PaymentService _instance = PaymentService._internal();
@@ -19,48 +16,38 @@ class PaymentService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // Backend URL - use configured backend from RazorpayConfig
-  static const String _backendUrl = RazorpayConfig.backendUrl;
-  
-  // Enable direct integration for development
-  static const bool _useTestMode = true;
-  static const bool _useDirectIntegration = true;
-
-  // Payment status
   bool _isInitialized = false;
   Function(PaymentSuccessResponse)? _onPaymentSuccess;
   Function(PaymentFailureResponse)? _onPaymentFailure;
   Function(ExternalWalletResponse)? _onExternalWallet;
   String? _currentPaymentRecordId;
   double? _currentPaymentAmount;
+  String? _currentCourseId;
 
   /// Initialize Razorpay
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
-      // Only initialize Razorpay on non-web platforms
       if (!kIsWeb) {
         _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
         _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
         _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
       }
-
       _isInitialized = true;
-      // Payment service initialized successfully
+      print('✅ Payment service initialized (PROTOTYPE MODE)');
     } catch (e) {
-      // Error initializing payment service: $e
+      print('❌ Error initializing payment service: $e');
       rethrow;
     }
   }
 
-  /// Start payment for course purchase using secure backend flow
+  /// Start payment for course purchase
   Future<void> startCoursePayment({
     required String courseId,
     required String courseTitle,
     required double amount,
     required String currency,
-    PaymentGateway gateway = PaymentGateway.razorpay,
     String? couponId,
     String? couponCode,
     double? discountAmount,
@@ -74,6 +61,7 @@ class PaymentService {
       }
 
       _currentPaymentAmount = amount;
+      _currentCourseId = courseId;
       _onPaymentSuccess = onSuccess;
       _onPaymentFailure = onFailure;
       _onExternalWallet = onExternalWallet;
@@ -83,7 +71,9 @@ class PaymentService {
         throw Exception('User not authenticated');
       }
 
-      // Create local payment record in Firestore
+      print('💰 Starting payment: ₹$amount for $courseTitle');
+
+      // Create local payment record
       final paymentRecordId = await _createPaymentRecord(
         courseId: courseId,
         courseTitle: courseTitle,
@@ -97,290 +87,219 @@ class PaymentService {
       );
       _currentPaymentRecordId = paymentRecordId;
 
-      switch (gateway) {
-        case PaymentGateway.razorpay:
-          // Create order through secure backend
-          final orderResult = await _createRazorpayOrder(
-            amount: amount,
-            currency: currency,
-            courseId: courseId,
-            courseTitle: courseTitle,
-            couponCode: couponCode,
-            discountAmount: discountAmount,
-          );
+      // Create order directly (PROTOTYPE - uses Razorpay API)
+      final orderId = await _createRazorpayOrderDirect(
+        amount: amount,
+        currency: currency,
+        courseId: courseId,
+        courseTitle: courseTitle,
+      );
 
-          if (!orderResult['success']) {
-            throw Exception(orderResult['error'] ?? 'Failed to create order');
-          }
+      print('📝 Order created: $orderId');
 
-          // Get Razorpay Key ID from settings (public key only)
-          final keyId = await _getRazorpayKeyId();
-          if (keyId == null || keyId.isEmpty) {
-            throw Exception(
-                'Razorpay Key ID not configured. Please contact admin.');
-          }
+      // Get Key ID
+      final keyId = RazorpayConfig.currentKeyId;
+      if (keyId.isEmpty || !keyId.startsWith('rzp_')) {
+        throw Exception('Invalid Razorpay Key ID in config');
+      }
 
-          // Use server-created order id only
-          String orderId = orderResult['order_id'];
+      // IMPORTANT: Amount must match exactly with order creation
+      final amountInPaise = (amount * 100).toInt();
+      
+      print('Opening checkout with:');
+      print('  Order ID: $orderId');
+      print('  Amount: $amountInPaise paise (₹$amount)');
+      print('  Currency: $currency');
+      
+      final options = {
+        'key': keyId,
+        'amount': amountInPaise,
+        'currency': currency,
+        'name': 'Hackethos4u',
+        'description': 'Course: $courseTitle',
+        'order_id': orderId,
+        'prefill': {
+          'contact': user.phoneNumber ?? '9999999999',
+          'email': user.email ?? 'test@example.com',
+          'name': user.displayName ?? 'Test User',
+        },
+        'notes': {
+          'paymentRecordId': paymentRecordId,
+          'courseId': courseId,
+        },
+        'theme': {
+          'color': '#2196F3',
+          'backdrop_color': '#000000',
+        },
+      };
 
-          final options = {
-            'key': keyId,
-            'amount': (amount * 100).toInt(), // Amount in paise
-            'currency': currency,
-            'name': 'Hackethos4u',
-            'description': 'Course: $courseTitle',
-            'order_id': orderId,
-            'prefill': {
-              'contact': user.phoneNumber ?? '',
-              'email': user.email ?? '',
-              'name': user.displayName ?? '',
-            },
-            'notes': {
-              'paymentRecordId': paymentRecordId,
-              'courseId': courseId,
-            },
-            'theme': {
-              'color': '#2196F3',
-              'backdrop_color': '#000000',
-            },
-            'modal': {
-              'ondismiss': () {
-                print('Payment modal dismissed');
-              }
-            },
-            'method': {
-              'netbanking': true,
-              'wallet': true,
-              'upi': true,
-              'card': true,
-              'emi': true,
-            },
-            'retry': {
-              'enabled': true,
-              'max_count': 3,
-            },
-            'timeout': 300, // 5 minutes
-          };
-
-          // Only open Razorpay on non-web platforms
-          if (!kIsWeb) {
-            _razorpay.open(options);
-          } else {
-            // For web, redirect to Razorpay Checkout
-            _openRazorpayWebCheckout(options);
-          }
-          break;
-        case PaymentGateway.stripe:
-          // Fallback: mark as pending-stripe and instruct client redirection (to be implemented server-side)
-          await _updatePaymentStatus(
-            paymentId: paymentRecordId,
-            status: 'pending_stripe',
-          );
-          _onPaymentFailure?.call(PaymentFailureResponse(
-              0,
-              'Stripe integration not configured on client. Please try Razorpay.',
-              {}));
-          break;
-        case PaymentGateway.paypal:
-          // Fallback: mark as pending-paypal and instruct client redirection (to be implemented server-side)
-          await _updatePaymentStatus(
-            paymentId: paymentRecordId,
-            status: 'pending_paypal',
-          );
-          _onPaymentFailure?.call(PaymentFailureResponse(
-              0,
-              'PayPal integration not configured on client. Please try Razorpay.',
-              {}));
-          break;
+      if (!kIsWeb) {
+        print('🚀 Opening Razorpay checkout...');
+        _razorpay.open(options);
+      } else {
+        throw Exception('Web payments not supported - use Android/iOS');
       }
     } catch (e) {
-      // Error starting payment: $e
-      // Surface failure to UI callback if set
+      print('❌ Payment start error: $e');
       _onPaymentFailure?.call(PaymentFailureResponse(0, e.toString(), {}));
     }
   }
 
-  /// Create Razorpay order through secure backend
-  Future<Map<String, dynamic>> _createRazorpayOrder({
+  /// Create Razorpay order directly (PROTOTYPE ONLY)
+  Future<String> _createRazorpayOrderDirect({
     required double amount,
     required String currency,
     required String courseId,
     required String courseTitle,
-    String? couponCode,
-    double? discountAmount,
   }) async {
     try {
       final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('User not authenticated');
+      if (user == null) throw Exception('User not authenticated');
+
+      // Validate credentials
+      final keyId = RazorpayConfig.currentKeyId;
+      final keySecret = RazorpayConfig.currentKeySecret;
+      
+      print('🔑 Key ID: ${keyId.substring(0, 12)}...');
+      print('🔑 Key Secret length: ${keySecret.length}');
+      
+      if (keyId.isEmpty || !keyId.startsWith('rzp_test_')) {
+        throw Exception('Invalid Key ID. Must start with rzp_test_');
+      }
+      
+      if (keySecret.isEmpty) {
+        throw Exception('Key Secret is empty. Update razorpay_config.dart');
       }
 
-      // Prepare order data
+      // Prepare order payload
       final orderData = {
-        'amount': (amount * 100).toInt(), // Convert to paise
+        'amount': (amount * 100).toInt(),
         'currency': currency,
-        'receipt':
-            'course_${courseId}_${DateTime.now().millisecondsSinceEpoch}',
+        'receipt': 'course_${courseId}_${DateTime.now().millisecondsSinceEpoch}',
         'notes': {
           'courseId': courseId,
           'courseTitle': courseTitle,
           'userId': user.uid,
-          'userEmail': user.email,
-          'couponCode': couponCode,
-          'discountAmount': discountAmount,
         },
       };
 
-      // If using test mode, create a mock order
-      if (_useTestMode) {
-        final mockOrderId = 'order_test_${DateTime.now().millisecondsSinceEpoch}';
-        await _storeOrderDetails(mockOrderId, orderData);
-        
-        return {
-          'success': true,
-          'order_id': mockOrderId,
-          'amount': amount,
-          'currency': currency,
-        };
-      }
+      print('📦 Order data: ${jsonEncode(orderData)}');
 
-      // Call backend to create order
+      // Create Basic Auth header
+      final credentials = '$keyId:$keySecret';
+      final encodedCredentials = base64Encode(utf8.encode(credentials));
+
+      print('📡 Calling Razorpay API...');
+      
       final response = await http.post(
-        Uri.parse('$_backendUrl/razorpay/create-order'),
+        Uri.parse('https://api.razorpay.com/v1/orders'),
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${await user.getIdToken()}',
+          'Authorization': 'Basic $encodedCredentials',
         },
         body: jsonEncode(orderData),
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('API timeout after 30 seconds'),
       );
 
-      if (response.statusCode == 200) {
+      print('📥 Response status: ${response.statusCode}');
+      print('📥 Response body: ${response.body}');
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
         final responseData = jsonDecode(response.body);
-
-        // Store order details in Firestore for tracking
-        await _storeOrderDetails(responseData['order_id'], orderData);
-
-        return {
-          'success': true,
-          'order_id': responseData['order_id'],
+        final orderId = responseData['id'];
+        
+        print('✅ Order created: $orderId');
+        
+        // Store order details
+        await _firestore.collection('orders').doc(orderId).set({
+          'orderId': orderId,
+          'userId': user.uid,
           'amount': amount,
           'currency': currency,
-        };
+          'courseId': courseId,
+          'status': 'created',
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
+        return orderId;
       } else {
         final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Failed to create order');
+        final errorMsg = errorData['error']?['description'] ?? errorData.toString();
+        print('❌ API Error: $errorMsg');
+        throw Exception('Razorpay API Error: $errorMsg');
       }
     } catch (e) {
-      print('Error creating Razorpay order: $e');
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      print('❌ Order creation failed: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      throw Exception('Failed to create order: $e');
     }
   }
 
-  /// Get Razorpay Key ID from settings (public key only)
-  Future<String?> _getRazorpayKeyId() async {
+  /// Handle successful payment
+  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
     try {
-      // Always use direct configuration for now
-      final keyId = RazorpayConfig.currentKeyId;
-      print('Razorpay Config - Test Mode: ${RazorpayConfig.isTestMode}');
-      print('Razorpay Config - Key ID: $keyId');
-      print('Razorpay Config - Is Configured: ${RazorpayConfig.isConfigured}');
-      return keyId;
-    } catch (e) {
-      print('Error getting Razorpay Key ID: $e');
-      return null;
-    }
-  }
+      print('✅ Payment successful: ${response.paymentId}');
 
-  /// Store order details in Firestore for tracking
-  Future<void> _storeOrderDetails(
-      String orderId, Map<String, dynamic> orderData) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return;
-
-      await _firestore.collection('orders').doc(orderId).set({
-        'orderId': orderId,
-        'userId': user.uid,
-        'userEmail': user.email,
-        'amount': orderData['amount'],
-        'currency': orderData['currency'],
-        'courseId': orderData['notes']['courseId'],
-        'courseTitle': orderData['notes']['courseTitle'],
-        'couponCode': orderData['notes']['couponCode'],
-        'discountAmount': orderData['notes']['discountAmount'],
-        'status': 'created',
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
-    } catch (e) {
-      print('Error storing order details: $e');
-    }
-  }
-
-  /// Verify payment signature through backend
-  Future<Map<String, dynamic>> _verifyPayment({
-    required String orderId,
-    required String paymentId,
-    required String signature,
-  }) async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('User not authenticated');
+      final paymentDocId = _currentPaymentRecordId;
+      if (paymentDocId == null) {
+        print('❌ No payment record ID');
+        return;
       }
 
-      // If using test mode, always return verified
-      if (_useTestMode) {
-        return {
-          'success': true,
-          'verified': true,
-          'payment_details': {
-            'order_id': orderId,
-            'payment_id': paymentId,
-            'signature': signature,
-          },
-        };
-      }
+      // For prototype: Skip signature verification, just mark as completed
+      print('⚠️ PROTOTYPE MODE: Skipping signature verification');
 
-      final verificationData = {
-        'order_id': orderId,
-        'payment_id': paymentId,
-        'signature': signature,
-      };
-
-      final response = await http.post(
-        Uri.parse('$_backendUrl/razorpay/verify-payment'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ${await user.getIdToken()}',
-        },
-        body: jsonEncode(verificationData),
+      // Update payment record
+      await _updatePaymentStatus(
+        paymentId: paymentDocId,
+        status: 'completed',
+        razorpayPaymentId: response.paymentId ?? '',
+        signature: response.signature ?? '',
       );
 
-      if (response.statusCode == 200) {
-        final responseData = jsonDecode(response.body);
-        return {
-          'success': true,
-          'verified': responseData['verified'] ?? false,
-          'payment_details': responseData['payment_details'],
-        };
-      } else {
-        final errorData = jsonDecode(response.body);
-        throw Exception(errorData['message'] ?? 'Payment verification failed');
+      // Enroll user
+      if (_currentCourseId != null) {
+        await _enrollUserInCourse(
+          courseId: _currentCourseId!,
+          userId: _auth.currentUser?.uid ?? '',
+        );
       }
+
+      print('🎉 Payment processed successfully');
+      _onPaymentSuccess?.call(response);
     } catch (e) {
-      print('Error verifying payment: $e');
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      print('❌ Error handling success: $e');
+      _onPaymentFailure?.call(PaymentFailureResponse(0, e.toString(), {}));
     }
   }
 
-  /// Create payment record in Firestore
+  /// Handle payment failure
+  void _handlePaymentError(PaymentFailureResponse response) async {
+    try {
+      print('❌ Payment failed: ${response.message}');
+      final paymentDocId = _currentPaymentRecordId;
+      if (paymentDocId != null) {
+        await _updatePaymentStatus(
+          paymentId: paymentDocId,
+          status: 'failed',
+          errorMessage: response.message ?? '',
+        );
+      }
+      _onPaymentFailure?.call(response);
+    } catch (e) {
+      print('❌ Error handling failure: $e');
+    }
+  }
+
+  /// Handle external wallet
+  void _handleExternalWallet(ExternalWalletResponse response) {
+    print('💳 External wallet: ${response.walletName}');
+    _onExternalWallet?.call(response);
+  }
+
+  /// Create payment record
   Future<String> _createPaymentRecord({
     required String courseId,
     required String courseTitle,
@@ -402,9 +321,7 @@ class PaymentService {
         'userEmail': userEmail,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
         'paymentMethod': 'razorpay',
-        'platform': 'mobile',
         if (couponId != null) 'couponId': couponId,
         if (couponCode != null) 'couponCode': couponCode,
         if (discountAmount != null) 'discountAmount': discountAmount,
@@ -413,126 +330,12 @@ class PaymentService {
       final docRef = await _firestore.collection('payments').add(paymentData);
       return docRef.id;
     } catch (e) {
-      // Error creating payment record: $e
+      print('❌ Error creating payment record: $e');
       rethrow;
     }
   }
 
-  /// Handle successful payment
-  void _handlePaymentSuccess(PaymentSuccessResponse response) async {
-    try {
-      // Payment successful: ${response.paymentId}
-
-      final paymentDocId = _currentPaymentRecordId;
-      if (paymentDocId == null) {
-        // No current payment record id found.
-        return;
-      }
-
-      // Verify payment through backend
-      final verificationResult = await _verifyPayment(
-        orderId: response.orderId ?? '',
-        paymentId: response.paymentId ?? '',
-        signature: response.signature ?? '',
-      );
-
-      if (!verificationResult['success'] || !verificationResult['verified']) {
-        // Payment verification failed
-        await _updatePaymentStatus(
-          paymentId: paymentDocId,
-          status: 'verification_failed',
-          errorMessage: 'Payment verification failed',
-        );
-        _onPaymentFailure?.call(
-            PaymentFailureResponse(0, 'Payment verification failed', {}));
-        return;
-      }
-
-      // Update payment record
-      await _updatePaymentStatus(
-        paymentId: paymentDocId,
-        status: 'completed',
-        razorpayPaymentId: response.paymentId ?? '',
-        signature: response.signature ?? '',
-      );
-
-      // Read payment record for details
-      final payment = await getPaymentDetails(paymentDocId);
-      final courseTitleFromRecord =
-          payment?['courseTitle']?.toString() ?? 'Course';
-      final courseIdFromRecord = payment?['courseId']?.toString() ?? '';
-      final amountFromRecord = (payment?['amount'] as num?)?.toDouble() ?? 0.0;
-      final couponIdFromRecord = payment?['couponId']?.toString();
-
-      // Increment coupon usage if applied
-      if (couponIdFromRecord != null && couponIdFromRecord.isNotEmpty) {
-        try {
-          await CouponService().incrementUsage(couponIdFromRecord);
-        } catch (_) {}
-      }
-
-      // Enroll user in course
-      await _enrollUserInCourse(
-        courseId: courseIdFromRecord,
-        userId: _auth.currentUser?.uid ?? '',
-      );
-
-      // Send notification
-      await _sendPaymentNotification(
-        userId: _auth.currentUser?.uid ?? '',
-        courseTitle: courseTitleFromRecord,
-        amount: amountFromRecord,
-      );
-
-      if (_onPaymentSuccess != null) {
-        _onPaymentSuccess!(response);
-      }
-    } catch (e) {
-      // Error handling payment success: $e
-    }
-  }
-
-  /// Handle payment failure
-  void _handlePaymentError(PaymentFailureResponse response) async {
-    try {
-      // Payment failed: ${response.message}
-      final paymentDocId = _currentPaymentRecordId;
-      if (paymentDocId != null) {
-        await _updatePaymentStatus(
-          paymentId: paymentDocId,
-          status: 'failed',
-          errorMessage: response.message ?? '',
-        );
-      }
-
-      if (_onPaymentFailure != null) {
-        _onPaymentFailure!(response);
-      }
-    } catch (e) {
-      // Error handling payment failure: $e
-    }
-  }
-
-  /// Handle external wallet
-  void _handleExternalWallet(ExternalWalletResponse response) {
-    try {
-      // External wallet selected: ${response.walletName}
-      final paymentDocId = _currentPaymentRecordId;
-      if (paymentDocId != null) {
-        _updatePaymentStatus(
-          paymentId: paymentDocId,
-          status: 'external_wallet',
-        );
-      }
-      if (_onExternalWallet != null) {
-        _onExternalWallet?.call(response);
-      }
-    } catch (e) {
-      // Error handling external wallet: $e
-    }
-  }
-
-  /// Update payment status in Firestore
+  /// Update payment status
   Future<void> _updatePaymentStatus({
     required String paymentId,
     required String status,
@@ -546,36 +349,22 @@ class PaymentService {
         'updatedAt': FieldValue.serverTimestamp(),
       };
 
-      if (razorpayPaymentId != null) {
-        updateData['razorpayPaymentId'] = razorpayPaymentId;
-      }
-
-      if (signature != null) {
-        updateData['signature'] = signature;
-      }
-
-      if (errorMessage != null) {
-        updateData['errorMessage'] = errorMessage;
-      }
+      if (razorpayPaymentId != null) updateData['razorpayPaymentId'] = razorpayPaymentId;
+      if (signature != null) updateData['signature'] = signature;
+      if (errorMessage != null) updateData['errorMessage'] = errorMessage;
 
       await _firestore.collection('payments').doc(paymentId).update(updateData);
     } catch (e) {
-      // Error updating payment status: $e
-      rethrow;
+      print('❌ Error updating payment: $e');
     }
   }
 
-  /// Enroll user in course after successful payment
+  /// Enroll user in course
   Future<void> _enrollUserInCourse({
     required String courseId,
     required String userId,
   }) async {
     try {
-      if (courseId.isEmpty) {
-        throw Exception('Invalid courseId for enrollment');
-      }
-
-      // Check if user is already enrolled
       final existingEnrollment = await _firestore
           .collection('enrollments')
           .where('courseId', isEqualTo: courseId)
@@ -583,147 +372,26 @@ class PaymentService {
           .get();
 
       if (existingEnrollment.docs.isNotEmpty) {
-        // User already enrolled in course
+        print('ℹ️ Already enrolled');
         return;
       }
 
-      // Create enrollment record
-      final enrollmentData = {
+      await _firestore.collection('enrollments').add({
         'courseId': courseId,
         'userId': userId,
         'enrolledAt': FieldValue.serverTimestamp(),
         'progress': 0.0,
-        'completedLessons': 0,
-        'totalLessons': 0,
-        'timeSpent': 0,
-        'lastAccessed': FieldValue.serverTimestamp(),
-        'certificateEarned': false,
         'status': 'active',
         'paymentRecordId': _currentPaymentRecordId,
-      };
-
-      final enrollmentRef =
-          await _firestore.collection('enrollments').add(enrollmentData);
-
-      // Create invoice for the user
-      try {
-        final user = _auth.currentUser;
-        if (user != null) {
-          final courseDoc =
-              await _firestore.collection('courses').doc(courseId).get();
-          final courseTitle = courseDoc.data()?['title'] ?? 'Course';
-          final amount = (_currentPaymentAmount ?? 0.0);
-
-          final userInvoiceRef = await _firestore
-              .collection('users')
-              .doc(user.uid)
-              .collection('invoices')
-              .add({
-            'courseId': courseId,
-            'courseTitle': courseTitle,
-            'amount': amount,
-            'paymentRecordId': _currentPaymentRecordId,
-            'enrollmentId': enrollmentRef.id,
-            'createdAt': FieldValue.serverTimestamp(),
-            'status': 'paid',
-          });
-
-          // Optional: also store under course for admin reporting
-          await _firestore
-              .collection('courses')
-              .doc(courseId)
-              .collection('invoices')
-              .doc(userInvoiceRef.id)
-              .set({
-            'userId': user.uid,
-            'amount': amount,
-            'paymentRecordId': _currentPaymentRecordId,
-            'createdAt': FieldValue.serverTimestamp(),
-            'status': 'paid',
-          });
-        }
-      } catch (e) {
-        // Ignore invoice failure to not block enrollment
-      }
-
-      // Update course enrollment count
-      await _updateCourseEnrollmentCount(courseId);
-    } catch (e) {
-      // Error enrolling user in course: $e
-      rethrow;
-    }
-  }
-
-  /// Update course enrollment count
-  Future<void> _updateCourseEnrollmentCount(String courseId) async {
-    try {
-      final courseRef = _firestore.collection('courses').doc(courseId);
-
-      await _firestore.runTransaction((transaction) async {
-        final courseDoc = await transaction.get(courseRef);
-        if (courseDoc.exists) {
-          final currentCount = courseDoc.data()?['studentsCount'] ?? 0;
-          transaction.update(courseRef, {
-            'studentsCount': currentCount + 1,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
       });
+
+      await _firestore.collection('courses').doc(courseId).update({
+        'studentsCount': FieldValue.increment(1),
+      });
+
+      print('✅ User enrolled successfully');
     } catch (e) {
-      // Error updating course enrollment count: $e
-    }
-  }
-
-  /// Send payment notification
-  Future<void> _sendPaymentNotification({
-    required String userId,
-    required String courseTitle,
-    required double amount,
-  }) async {
-    try {
-      final notificationData = {
-        'userId': userId,
-        'title': 'Payment Successful!',
-        'body': 'You have successfully enrolled in $courseTitle',
-        'type': 'payment_success',
-        'data': {
-          'courseTitle': courseTitle,
-          'amount': amount,
-        },
-        'read': false,
-        'createdAt': FieldValue.serverTimestamp(),
-      };
-
-      await _firestore.collection('notifications').add(notificationData);
-    } catch (e) {
-      // Error sending payment notification: $e
-    }
-  }
-
-  /// Get payment history for user
-  Future<List<Map<String, dynamic>>> getPaymentHistory() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('User not authenticated');
-      }
-
-      final querySnapshot = await _firestore
-          .collection('payments')
-          .where('userId', isEqualTo: user.uid)
-          .orderBy('createdAt', descending: true)
-          .get();
-
-      return querySnapshot.docs.map((doc) {
-        final data = doc.data();
-        return {
-          'id': doc.id,
-          ...data,
-        };
-      }).toList();
-    } catch (e) {
-      // Error getting payment history: $e
-      return [];
+      print('❌ Error enrolling user: $e');
     }
   }
 
@@ -732,77 +400,26 @@ class PaymentService {
     try {
       final doc = await _firestore.collection('payments').doc(paymentId).get();
       if (doc.exists) {
-        return {
-          'id': doc.id,
-          ...doc.data()!,
-        };
+        return {'id': doc.id, ...doc.data()!};
       }
       return null;
     } catch (e) {
-      // Error getting payment details: $e
       return null;
     }
   }
 
-  /// Verify payment signature
-  bool verifyPaymentSignature({
-    required String paymentId,
-    required String orderId,
-    required String signature,
-  }) {
+  /// Process payment (compatibility method)
+  Future<Map<String, dynamic>> processPayment(Map<String, dynamic> paymentData) async {
     try {
-      // In production, verify signature on server side
-      // For now, return true (implement proper verification)
-      return true;
-    } catch (e) {
-      // Error verifying payment signature: $e
-      return false;
-    }
-  }
-
-  /// Refund payment
-  Future<bool> refundPayment({
-    required String paymentId,
-    required double amount,
-    String? reason,
-  }) async {
-    try {
-      // This should be implemented on server side
-      // For now, just update the payment record
-      await _updatePaymentStatus(
-        paymentId: paymentId,
-        status: 'refunded',
-        errorMessage: reason ?? 'Refund processed',
-      );
-
-      return true;
-    } catch (e) {
-      // Error refunding payment: $e
-      return false;
-    }
-  }
-
-  /// Process payment (for compatibility with existing code)
-  Future<Map<String, dynamic>> processPayment(
-      Map<String, dynamic> paymentData) async {
-    try {
-      final amount = paymentData['amount'] as double;
-      final currency = paymentData['currency'] ?? 'INR';
-      final courseId = paymentData['courseId'] as String;
-      final courseTitle = paymentData['courseTitle'] as String;
-      final couponCode = paymentData['couponCode'] as String?;
-      final discountAmount = paymentData['discountAmount'] as double?;
-
-      // Create a completer to handle the async payment flow
       final completer = Completer<Map<String, dynamic>>();
 
       await startCoursePayment(
-        courseId: courseId,
-        courseTitle: courseTitle,
-        amount: amount,
-        currency: currency,
-        couponCode: couponCode,
-        discountAmount: discountAmount,
+        courseId: paymentData['courseId'] as String,
+        courseTitle: paymentData['courseTitle'] as String,
+        amount: (paymentData['amount'] as num).toDouble(),
+        currency: paymentData['currency'] as String? ?? 'INR',
+        couponCode: paymentData['couponCode'] as String?,
+        discountAmount: paymentData['discountAmount'] as double?,
         onSuccess: (response) {
           completer.complete({
             'success': true,
@@ -828,206 +445,67 @@ class PaymentService {
         },
       );
 
-      // Wait for payment completion (with timeout)
       return await completer.future.timeout(
         const Duration(minutes: 10),
-        onTimeout: () => {
-          'success': false,
-          'error': 'Payment timeout',
-        },
+        onTimeout: () => {'success': false, 'error': 'Payment timeout'},
       );
     } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// Direct Razorpay payment for testing
+  /// Direct payment method (compatibility)
   Future<Map<String, dynamic>> processDirectPayment({
     required double amount,
     required String courseTitle,
     required String courseId,
   }) async {
     try {
-      if (!_isInitialized) {
-        await initialize();
-      }
-
-      final user = _auth.currentUser;
-      if (user == null) {
-        throw Exception('User not authenticated');
-      }
-
-      // Create a completer to handle the async payment flow
       final completer = Completer<Map<String, dynamic>>();
 
-      // Set up payment callbacks
-      _onPaymentSuccess = (response) {
-        completer.complete({
-          'success': true,
-          'paymentId': response.paymentId,
-          'orderId': response.orderId,
-          'signature': response.signature,
-        });
-      };
-
-      _onPaymentFailure = (response) {
-        completer.complete({
-          'success': false,
-          'error': response.message ?? 'Payment failed',
-          'code': response.code,
-        });
-      };
-
-      _onExternalWallet = (response) {
-        completer.complete({
-          'success': false,
-          'error': 'External wallet selected: ${response.walletName}',
-          'walletName': response.walletName,
-        });
-      };
-
-      // Create payment record
-      final paymentRecordId = await _createPaymentRecord(
+      await startCoursePayment(
         courseId: courseId,
         courseTitle: courseTitle,
         amount: amount,
         currency: 'INR',
-        userId: user.uid,
-        userEmail: user.email ?? '',
+        onSuccess: (response) {
+          completer.complete({
+            'success': true,
+            'paymentId': response.paymentId,
+            'orderId': response.orderId,
+            'signature': response.signature,
+          });
+        },
+        onFailure: (response) {
+          completer.complete({
+            'success': false,
+            'error': response.message ?? 'Payment failed',
+            'code': response.code,
+          });
+        },
+        onExternalWallet: (response) {
+          completer.complete({
+            'success': false,
+            'error': 'External wallet selected: ${response.walletName}',
+            'walletName': response.walletName,
+          });
+        },
       );
-      _currentPaymentRecordId = paymentRecordId;
-      _currentPaymentAmount = amount;
 
-      // Get Razorpay Key ID
-      final keyId = await _getRazorpayKeyId();
-      print('Razorpay Key ID: $keyId');
-      if (keyId == null || keyId.isEmpty) {
-        throw Exception('Razorpay Key ID not configured');
-      }
-
-      // Create order ID
-      final orderId = 'order_${DateTime.now().millisecondsSinceEpoch}';
-
-      final options = {
-        'key': keyId,
-        'amount': (amount * 100).toInt(), // Amount in paise
-        'currency': 'INR',
-        'name': 'Hackethos4u',
-        'description': 'Course: $courseTitle',
-        'order_id': orderId,
-        'prefill': {
-          'contact': user.phoneNumber ?? '9876543210',
-          'email': user.email ?? 'test@example.com',
-          'name': user.displayName ?? 'User',
-        },
-        'notes': {
-          'paymentRecordId': paymentRecordId,
-          'courseId': courseId,
-        },
-        'theme': {
-          'color': '#2196F3',
-          'backdrop_color': '#000000',
-        },
-        'method': {
-          'netbanking': true,
-          'wallet': true,
-          'upi': true,
-          'card': true,
-          'emi': true,
-        },
-        'retry': {
-          'enabled': true,
-          'max_count': 3,
-        },
-        'timeout': 300, // 5 minutes
-      };
-
-      // Open Razorpay payment
-      _razorpay.open(options);
-
-      // Wait for payment completion (with timeout)
       return await completer.future.timeout(
         const Duration(minutes: 10),
-        onTimeout: () => {
-          'success': false,
-          'error': 'Payment timeout',
-        },
+        onTimeout: () => {'success': false, 'error': 'Payment timeout'},
       );
     } catch (e) {
-      return {
-        'success': false,
-        'error': e.toString(),
-      };
+      return {'success': false, 'error': e.toString()};
     }
   }
 
-  /// Open Razorpay web checkout
-  void _openRazorpayWebCheckout(Map<String, dynamic> options) {
-    try {
-      // For web, we need to create a checkout URL
-      final checkoutUrl = _buildRazorpayWebCheckoutUrl(options);
-      
-      // Open in new tab
-      if (kIsWeb) {
-        // Use url_launcher for web
-        // This will be handled by the web platform
-        print('Opening Razorpay checkout: $checkoutUrl');
-        
-        // For now, show a message to use mobile app
-        _onPaymentFailure?.call(PaymentFailureResponse(
-          0, 
-          'For web payments, please use our mobile app or contact support.', 
-          {}
-        ));
-      }
-    } catch (e) {
-      _onPaymentFailure?.call(PaymentFailureResponse(
-        0, 
-        'Error opening web checkout: $e', 
-        {}
-      ));
-    }
-  }
-
-  /// Build Razorpay web checkout URL
-  String _buildRazorpayWebCheckoutUrl(Map<String, dynamic> options) {
-    final keyId = options['key'] as String;
-    final amount = options['amount'] as int;
-    final currency = options['currency'] as String;
-    final name = options['name'] as String;
-    final description = options['description'] as String;
-    final orderId = options['order_id'] as String;
-    
-    final params = {
-      'key_id': keyId,
-      'amount': amount,
-      'currency': currency,
-      'name': name,
-      'description': description,
-      'order_id': orderId,
-      'prefill': {
-        'name': options['prefill']['name'],
-        'email': options['prefill']['email'],
-        'contact': options['prefill']['contact'],
-      },
-      'theme': {
-        'color': options['theme']['color'],
-      },
-    };
-    
-    // This would be the actual Razorpay checkout URL
-    return 'https://checkout.razorpay.com/v1/checkout.js';
-  }
-
-  /// Dispose resources
+  /// Dispose
   void dispose() {
     if (_isInitialized) {
       _razorpay.clear();
       _isInitialized = false;
     }
-    _currentPaymentAmount = null;
   }
 }

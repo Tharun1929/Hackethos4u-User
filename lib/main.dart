@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
@@ -12,7 +12,6 @@ import 'services/app_initializer.dart';
 import 'services/app_settings_service.dart';
 import 'utils/theme_provider.dart';
 import 'utils/app_theme.dart';
-
 import 'services/auth_service.dart';
 import 'screens/splash_screen.dart';
 import 'screens/welcome_screen.dart';

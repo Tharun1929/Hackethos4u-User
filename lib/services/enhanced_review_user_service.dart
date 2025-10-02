@@ -325,7 +325,7 @@ class EnhancedReviewUserService {
       Map<String, String> courseTitles = {};
 
       for (final doc in reviewsSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final courseId = data['courseId'] as String?;
         final courseTitle = data['courseTitle'] as String?;
         final rating = (data['rating'] ?? 0.0).toDouble();
@@ -378,7 +378,7 @@ class EnhancedReviewUserService {
       int reviewCount = 0;
 
       for (final doc in reviewsSnapshot.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final rating = (data['rating'] ?? 0.0).toDouble();
         final ratingInt = rating.round();
         if (ratingInt >= 1 && ratingInt <= 5) {
